@@ -1,0 +1,19 @@
+{
+  "name": "ipam-address-manager",
+  "version": "1.0.0",
+  "description": "IPAM Address Manager on APK.audio",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [
+    "ipam",
+    "subnet",
+    "dhcp",
+    "vlan",
+    "ipv4",
+    "network"
+  ],
+  "author": "Anthony Kuzub",
+  "license": "MIT"
+}

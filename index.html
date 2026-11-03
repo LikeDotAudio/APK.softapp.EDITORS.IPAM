@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IPAM Network Address Manager — APK.audio</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #0f1218; color: #e2e8f0; margin: 0; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #283348; padding-bottom: 12px; margin-bottom: 20px; }
+    .card { background: #171d27; border: 1px solid #283348; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #222c3d; font-family: monospace; }
+    button { background: #0284c7; color: #fff; border: 1px solid #38bdf8; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:20px;">🌐</span>
+      <h2>IPAM Network Address Manager</h2>
+    </div>
+    <button id="btn-export">Export Subnet Schedule</button>
+  </header>
+
+  <div class="card">
+    <h3 style="font-size:14px; text-transform:uppercase; color:#94a3b8;">Configured Facility Subnets</h3>
+    <table>
+      <thead><tr><th>Subnet (CIDR)</th><th>VLAN</th><th>Network Role</th><th>Gateway</th><th>Utilization</th></tr></thead>
+      <tbody id="ipam-rows"></tbody>
+    </table>
+  </div>
+
+  <script type="module">
+    import { IpamModel } from './js/ipamApp.js';
+    const model = new IpamModel();
+    const tbody = document.getElementById('ipam-rows');
+
+    model.subnets.forEach(s => {
+      const tr = document.createElement('tr');
+      const pct = Math.round((s.allocated / s.total) * 100);
+      tr.innerHTML = `<td><b>${s.cidr}</b></td><td>V${s.vlan}</td><td>${s.name}</td><td>${s.gateway}</td><td style="color:#38bdf8;">${s.allocated}/${s.total} (${pct}%)</td>`;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(model.subnets, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'facility-ipam.json';
+      a.click();
+    });
+  </script>
+</body>
+</html>

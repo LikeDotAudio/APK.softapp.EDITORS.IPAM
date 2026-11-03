@@ -1,0 +1,8 @@
+{
+  "name": "IPAM Network Address Manager",
+  "icon": "🌐",
+  "group": "Design",
+  "subGroup": "Network & Topology",
+  "description": "IP Address Management (IPAM) Softapp: manage facility IP address spaces, IPv4/IPv6 subnets, CIDR netmasks, DHCP pools, gateway assignments, and VLAN bindings.",
+  "app": "APK:Softapps/EDITORS/EDITORS.IPAM/index.html"
+}
