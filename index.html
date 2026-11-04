@@ -3,52 +3,140 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IPAM Network Address Manager — APK.audio</title>
+  <title>IPAM Network Address Manager</title>
+  <link rel="stylesheet" href="css/theme.css">
   <style>
-    body { font-family: -apple-system, sans-serif; background: #0f1218; color: #e2e8f0; margin: 0; padding: 20px; }
-    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #283348; padding-bottom: 12px; margin-bottom: 20px; }
-    .card { background: #171d27; border: 1px solid #283348; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #222c3d; font-family: monospace; }
-    button { background: #0284c7; color: #fff; border: 1px solid #38bdf8; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+    .main-layout {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 70px);
+      padding: 16px;
+      gap: 16px;
+      box-sizing: border-box;
+    }
+    .panel {
+      background: var(--surface-primary, #121A2F);
+      border: 1px solid var(--border-color, #1E2A45);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 12px 16px;
+      background: var(--surface-secondary, #0E1424);
+      border-bottom: 1px solid var(--border-color, #1E2A45);
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-bright, #F0F4F8);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .svg-viewport {
+      background: var(--surface-bg, #080C16);
+      padding: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .table-container {
+      flex: 1;
+      overflow-y: auto;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    table.data-table th {
+      background: var(--surface-secondary, #0E1424);
+      color: var(--text-muted, #8B9BB4);
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color, #1E2A45);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    table.data-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border-color, #1E2A45);
+      color: var(--text-bright, #F0F4F8);
+    }
+    .inline-cell {
+      background: rgba(255, 255, 255, 0.02);
+      cursor: text;
+    }
+    .inline-cell:focus {
+      outline: 1px solid var(--accent-orange, #F4902C);
+      background: rgba(244, 144, 44, 0.1);
+    }
+    .btn-delete {
+      background: transparent;
+      border: none;
+      color: #FF5A5A;
+      cursor: pointer;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .btn-delete:hover {
+      background: rgba(255, 90, 90, 0.2);
+    }
   </style>
 </head>
-<body>
-  <header>
-    <div style="display:flex; align-items:center; gap:10px;">
-      <span style="font-size:20px;">🌐</span>
-      <h2>IPAM Network Address Manager</h2>
+<body class="deep-horizon">
+  <div class="window-header">
+    <div class="window-title">
+      <span class="window-icon">🌐</span>
+      <span class="window-text">IPAM Network Address Manager</span>
+      <span id="block-tag" class="block-tag">IPAM BLOCK</span>
     </div>
-    <button id="btn-export">Export Subnet Schedule</button>
-  </header>
-
-  <div class="card">
-    <h3 style="font-size:14px; text-transform:uppercase; color:#94a3b8;">Configured Facility Subnets</h3>
-    <table>
-      <thead><tr><th>Subnet (CIDR)</th><th>VLAN</th><th>Network Role</th><th>Gateway</th><th>Utilization</th></tr></thead>
-      <tbody id="ipam-rows"></tbody>
-    </table>
+    <div class="window-actions">
+      <input type="text" id="prop-scopeName" placeholder="IPAM Scope Name" style="background: var(--surface-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--text-bright); font-size: 12px; width: 220px;">
+      <button id="btn-open" class="btn-action">📂 Open Block</button>
+      <button id="btn-discovered" class="btn-action">⚡ Discovered</button>
+      <button id="btn-save" class="btn-action btn-primary">💾 Save & Return</button>
+      <button id="btn-close" class="btn-action btn-close">✕</button>
+    </div>
   </div>
 
-  <script type="module">
-    import { IpamModel } from './js/ipamApp.js';
-    const model = new IpamModel();
-    const tbody = document.getElementById('ipam-rows');
+  <div class="main-layout">
+    <!-- Visual Subnet Capacity Map -->
+    <div class="panel" style="flex: 0 0 auto;">
+      <div class="panel-header">
+        <span>IP Address Allocation & Subnet Capacity Pool</span>
+        <span id="telemetry-badge" style="font-size: 12px; font-weight: bold;">Loading IPAM...</span>
+      </div>
+      <div id="utilization-svg" class="svg-viewport"></div>
+    </div>
 
-    model.subnets.forEach(s => {
-      const tr = document.createElement('tr');
-      const pct = Math.round((s.allocated / s.total) * 100);
-      tr.innerHTML = `<td><b>${s.cidr}</b></td><td>V${s.vlan}</td><td>${s.name}</td><td>${s.gateway}</td><td style="color:#38bdf8;">${s.allocated}/${s.total} (${pct}%)</td>`;
-      tbody.appendChild(tr);
-    });
+    <!-- Subnet Schedule Table -->
+    <div class="panel" style="flex: 1 1 auto;">
+      <div class="panel-header">
+        <span>Subnet Definitions & Gateway Configuration</span>
+        <button id="btn-add-subnet" class="btn-action btn-small">+ Add Subnet</button>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 18%;">CIDR Subnet</th>
+              <th style="width: 8%;">VLAN</th>
+              <th style="width: 25%;">Network Purpose</th>
+              <th style="width: 15%;">Default Gateway</th>
+              <th style="width: 8%;">Used</th>
+              <th style="width: 8%;">Total</th>
+              <th style="width: 14%;">Capacity</th>
+              <th style="width: 4%; text-align: center;">Act</th>
+            </tr>
+          </thead>
+          <tbody id="subnet-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-    document.getElementById('btn-export').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(model.subnets, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'facility-ipam.json';
-      a.click();
-    });
-  </script>
+  <script type="module" src="js/ipamApp.js"></script>
 </body>
 </html>
