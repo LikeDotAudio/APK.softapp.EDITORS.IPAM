@@ -154,7 +154,7 @@ export class IpamApp {
         <td class="inline-cell" contenteditable="true" data-idx="${idx}" data-field="total">${sub.total}</td>
         <td>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div style="flex: 1; height: 8px; background: #080C16; border-radius: 4px; overflow: hidden;">
+            <div style="flex: 1; height: 8px; background: #121212; border-radius: 4px; overflow: hidden;">
               <div style="width: ${pct}%; height: 100%; background: ${pct > 85 ? '#EF4444' : (pct > 60 ? '#F4902C' : '#4ADE80')};"></div>
             </div>
             <span style="font-size: 11px; color: var(--text-muted); width: 32px;">${pct}%</span>
@@ -204,25 +204,25 @@ export class IpamApp {
 
       rowsSvg += `
         <!-- Subnet Name & VLAN -->
-        <text x="25" y="${y + 14}" fill="#F0F4F8" font-size="11" font-family="JetBrains Mono, monospace">${sub.cidr}</text>
-        <rect x="145" y="${y + 2}" width="42" height="16" rx="3" fill="#1E2A45"/>
+        <text x="25" y="${y + 14}" fill="#f4f4f5" font-size="11" font-family="JetBrains Mono, monospace">${sub.cidr}</text>
+        <rect x="145" y="${y + 2}" width="42" height="16" rx="3" fill="#2c2c2c"/>
         <text x="166" y="${y + 14}" fill="#4A9EFF" font-size="9" font-family="sans-serif" text-anchor="middle">VLAN ${sub.vlan}</text>
 
         <!-- Capacity Bar Track -->
-        <rect x="200" y="${y + 4}" width="300" height="12" rx="3" fill="#080C16" stroke="#1E2A45" stroke-width="1"/>
+        <rect x="200" y="${y + 4}" width="300" height="12" rx="3" fill="#121212" stroke="#2c2c2c" stroke-width="1"/>
         <rect x="200" y="${y + 4}" width="${barW}" height="12" rx="3" fill="${barColor}"/>
 
         <!-- Numbers -->
-        <text x="515" y="${y + 14}" fill="#8B9BB4" font-size="10" font-family="sans-serif">${sub.allocated}/${sub.total} (${Math.round(pct * 100)}%)</text>
+        <text x="515" y="${y + 14}" fill="#888888" font-size="10" font-family="sans-serif">${sub.allocated}/${sub.total} (${Math.round(pct * 100)}%)</text>
       `;
     });
 
     const svg = `
       <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="${width}" height="${height}" fill="#080C16" rx="8"/>
-        <text x="25" y="20" fill="#8B9BB4" font-size="10" font-family="sans-serif" text-transform="uppercase">Subnet CIDR Scope</text>
-        <text x="200" y="20" fill="#8B9BB4" font-size="10" font-family="sans-serif" text-transform="uppercase">IP Allocation Distribution</text>
-        <line x1="20" y1="24" x2="620" y2="24" stroke="#1E2A45" stroke-width="1"/>
+        <rect x="0" y="0" width="${width}" height="${height}" fill="#121212" rx="8"/>
+        <text x="25" y="20" fill="#888888" font-size="10" font-family="sans-serif" text-transform="uppercase">Subnet CIDR Scope</text>
+        <text x="200" y="20" fill="#888888" font-size="10" font-family="sans-serif" text-transform="uppercase">IP Allocation Distribution</text>
+        <line x1="20" y1="24" x2="620" y2="24" stroke="#2c2c2c" stroke-width="1"/>
         ${rowsSvg}
       </svg>
     `;

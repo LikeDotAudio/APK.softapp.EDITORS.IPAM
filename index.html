@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IPAM Network Address Manager</title>
+  <link rel="stylesheet" href="./vendor/apk-contracts/apk-tokens.css">
   <link rel="stylesheet" href="css/theme.css">
   <style>
     .main-layout {
@@ -15,8 +16,8 @@
       box-sizing: border-box;
     }
     .panel {
-      background: var(--surface-primary, #121A2F);
-      border: 1px solid var(--border-color, #1E2A45);
+      background: var(--surface-primary, #18181b);
+      border: 1px solid var(--border-color, #2c2c2c);
       border-radius: 8px;
       display: flex;
       flex-direction: column;
@@ -24,17 +25,17 @@
     }
     .panel-header {
       padding: 12px 16px;
-      background: var(--surface-secondary, #0E1424);
-      border-bottom: 1px solid var(--border-color, #1E2A45);
+      background: var(--surface-secondary, #0f0f11);
+      border-bottom: 1px solid var(--border-color, #2c2c2c);
       font-weight: 600;
       font-size: 13px;
-      color: var(--text-bright, #F0F4F8);
+      color: var(--text-bright, #f4f4f5);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     .svg-viewport {
-      background: var(--surface-bg, #080C16);
+      background: var(--surface-bg, #121212);
       padding: 12px;
       display: flex;
       justify-content: center;
@@ -50,18 +51,18 @@
       font-size: 12px;
     }
     table.data-table th {
-      background: var(--surface-secondary, #0E1424);
-      color: var(--text-muted, #8B9BB4);
+      background: var(--surface-secondary, #0f0f11);
+      color: var(--text-muted, #888888);
       padding: 8px 10px;
       text-align: left;
-      border-bottom: 1px solid var(--border-color, #1E2A45);
+      border-bottom: 1px solid var(--border-color, #2c2c2c);
       font-size: 11px;
       text-transform: uppercase;
     }
     table.data-table td {
       padding: 6px 10px;
-      border-bottom: 1px solid var(--border-color, #1E2A45);
-      color: var(--text-bright, #F0F4F8);
+      border-bottom: 1px solid var(--border-color, #2c2c2c);
+      color: var(--text-bright, #f4f4f5);
     }
     .inline-cell {
       background: rgba(255, 255, 255, 0.02);
