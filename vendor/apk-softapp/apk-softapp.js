@@ -451,7 +451,13 @@
             Object.keys(presence).forEach(function (k) {
                 var p = presence[k];
                 var mac = macIn(p.id);
-                var hostKey = Object.keys(hosts).filter(function (h) { return hosts[h].id === p.id; })[0];
+                // A scanner names its thing's presence document itself (the presence_topic
+                // leaf); that pointer is the link when the presence id is not the topic key
+                // (wireless_wwb:plan:… beside wireless_wwb_plan_…, ROAD-3519) and no MAC joins them.
+                var topic = roots.discovery + '/' + k;
+                var hostKey = Object.keys(hosts).filter(function (h) {
+                    return hosts[h].id === p.id || realValue(hosts[h].fields.presence_topic) === topic;
+                })[0];
                 var r = mac && (mac in parent) ? find(mac) : hostKey ? find('host:' + hostKey) : null;
                 if (r && groups[r]) groups[r].presence.push(p);   // presence alone is not a thing
             });
