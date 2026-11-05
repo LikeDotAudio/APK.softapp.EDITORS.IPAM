@@ -1,0 +1,6 @@
+{
+  "_about": "What IPAM offers from the bus: every discovered thing with an IPv4 address, placed in the subnet that holds it. Tunables only. `kinds` empty means every thing the bus knows (matched as in APKSoftapp.discovered: a case-insensitive substring of a protocol, scanner kind or device_class). `suggestPrefix` is the prefix length a new subnet is proposed at for an address no subnet holds. `countStates` is which live states count as an address in use: a dead thing is not using its address.",
+  "kinds": [],
+  "suggestPrefix": 24,
+  "countStates": ["good", "kinda"]
+}

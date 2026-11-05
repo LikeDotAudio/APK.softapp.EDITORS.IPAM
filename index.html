@@ -6,6 +6,8 @@
   <title>IPAM Network Address Manager</title>
   <link rel="stylesheet" href="./vendor/apk-contracts/apk-tokens.css">
   <link rel="stylesheet" href="css/theme.css">
+  <!-- THE ONE TABLE (FrontEnd/shared/apk-table.*, vendored; check.sh webshared) -->
+  <link rel="stylesheet" href="./vendor/apk-table/apk-table.css">
   <style>
     .main-layout {
       display: flex;
@@ -84,6 +86,13 @@
     .btn-delete:hover {
       background: rgba(255, 90, 90, 0.2);
     }
+    .apk-table-host { flex: 1; min-height: 0; display: flex; }
+    .net-panel { flex: 0 0 auto; max-height: 32vh; }
+    body.net-hidden .net-panel { display: none; }
+    #net-status { font-size: 11px; font-weight: normal; }
+    #net-status[data-apk-state="good"], .apk-live[data-apk-state="good"] { color: var(--apk-state-good, #4ADE80); }
+    #net-status[data-apk-state="kinda"], .apk-live[data-apk-state="kinda"] { color: var(--apk-state-kinda, #F4902C); }
+    #net-status[data-apk-state="dead"], .apk-live[data-apk-state="dead"] { color: var(--apk-state-dead, #EF4444); }
   </style>
 </head>
 <body class="deep-horizon">
@@ -96,13 +105,22 @@
     <div class="window-actions">
       <input type="text" id="prop-scopeName" placeholder="IPAM Scope Name" style="background: var(--surface-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--text-bright); font-size: 12px; width: 220px;">
       <button id="btn-open" class="btn-action">📂 Open Block</button>
-      <button id="btn-discovered" class="btn-action">⚡ Discovered</button>
+      <button id="btn-discovered" class="btn-action" title="Show / hide what the bus already knows">⚡ Discovered</button>
       <button id="btn-save" class="btn-action btn-primary">💾 Save & Return</button>
       <button id="btn-close" class="btn-action btn-close">✕</button>
     </div>
   </div>
 
   <div class="main-layout">
+    <!-- What the bus already knows (APKSoftapp.discovered; which things: config/discovery.json) -->
+    <div class="panel net-panel" id="net-panel">
+      <div class="panel-header">
+        <span>Addresses on the network (live from the bus)</span>
+        <span id="net-status" data-apk-state="kinda">Starting…</span>
+      </div>
+      <div id="net-table" class="apk-table-host"></div>
+    </div>
+
     <!-- Visual Subnet Capacity Map -->
     <div class="panel" style="flex: 0 0 auto;">
       <div class="panel-header">
@@ -119,25 +137,18 @@
         <button id="btn-add-subnet" class="btn-action btn-small">+ Add Subnet</button>
       </div>
       <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width: 18%;">CIDR Subnet</th>
-              <th style="width: 8%;">VLAN</th>
-              <th style="width: 25%;">Network Purpose</th>
-              <th style="width: 15%;">Default Gateway</th>
-              <th style="width: 8%;">Used</th>
-              <th style="width: 8%;">Total</th>
-              <th style="width: 14%;">Capacity</th>
-              <th style="width: 4%; text-align: center;">Act</th>
-            </tr>
-          </thead>
-          <tbody id="subnet-table-body"></tbody>
-        </table>
+        <div id="subnet-table" class="apk-table-host"></div>
       </div>
     </div>
   </div>
 
+  <!-- SDK: the contract's browser bundle (window.APKContracts: topic builders, presence rule). -->
+  <script src="./vendor/apk-contracts/apk-contracts.global.js"></script>
+  <!-- API: the shell's one softapp bus helper (window.APKBus). Absent off the bench: the panel says so. -->
+  <script src="/FrontEnd/shared/apk-bus.js"></script>
+  <!-- The one softapp client: CAD host@1 bridge, discovered things, esc (window.APKSoftapp). -->
+  <script src="./vendor/apk-softapp/apk-softapp.js"></script>
+  <script src="./vendor/apk-table/apk-table.js"></script>
   <script type="module" src="js/ipamApp.js"></script>
 </body>
 </html>
