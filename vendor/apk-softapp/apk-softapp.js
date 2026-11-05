@@ -350,6 +350,7 @@
         var hosts = {};        // proto/kind/id -> { proto, kind, id, fields }
         var agents = {};       // node -> { node, target, rows: {section/key: row}, status }
         var presence = {};     // proto/id -> { proto, id, doc }
+        var verified = {};     // proto/id -> verifiedAt (ms): the agent's DiscoveryVerified, Discovery/{proto}/{id}/verified
         var seen = {};         // protocols seen
 
         function protocol(seg, text) {
@@ -401,6 +402,16 @@
         }
 
         function presenceMsg(seg, text) {
+            if (seg.length === 3 && seg[2] === 'verified' && seg[0].charAt(0) !== '_') {
+                // "I just re-verified this thing" (contracts discovery-verified.ts): the trust
+                // window reads verifiedAt as well as the presence document's own stamps.
+                var vkey = seg[0] + '/' + seg[1];
+                var vdoc = text ? parseJson(text) : null;
+                var ms = isObj(vdoc) ? Date.parse(vdoc.verifiedAt) : NaN;
+                if (!isFinite(ms)) { var hadV = vkey in verified; delete verified[vkey]; return hadV; }
+                verified[vkey] = ms;
+                return vkey in presence;
+            }
             if (seg.length !== 2 || seg[0].charAt(0) === '_') return false;
             var key = seg[0] + '/' + seg[1];
             if (text === '' || text == null) { var had = key in presence; delete presence[key]; return had; }
@@ -527,6 +538,8 @@
                 if (active === null || active === undefined) return;
                 if (active) {
                     var seenAt = Date.parse(p.doc.lastDiscovered || p.doc.lastOnline);
+                    var vAt = verified[p.proto + '/' + p.id];
+                    if (isFinite(vAt) && !(vAt <= seenAt)) seenAt = vAt;   // re-verified since: that counts
                     var age = t - seenAt;
                     facts.push(age <= trustMs ? { at: seenAt, state: 'good', why: p.proto + ' verified it ' + ago(age) }
                         : { at: seenAt, state: 'kinda', why: p.proto + ' last verified it ' + ago(age) });
@@ -597,7 +610,10 @@
                 model.protocolsSeen().forEach(function (p) {
                     if (watched[p]) return;
                     watched[p] = true;
-                    try { offs.push(link.subscribe(C.Topics.discoveryWildcard(p), feed)); } catch (e) { /* not a valid segment */ }
+                    try {
+                        offs.push(link.subscribe(C.Topics.discoveryWildcard(p), feed));
+                        offs.push(link.subscribe(C.Topics.discoveryWildcard(p) + '/verified', feed));   // DiscoveryVerified
+                    } catch (e) { /* not a valid segment */ }
                 });
                 if (changed && !pending) pending = schedule(emit);
             }
