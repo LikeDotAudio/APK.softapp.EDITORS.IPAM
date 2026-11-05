@@ -3,7 +3,6 @@
 
 import { IpamModel } from './ipamModel.js';
 import { sightings, subnetFor, inCidr } from './ipamDiscovered.js';
-import { mountDiscovered, loadRules, thingRow, THING_COLUMNS } from './discoveredTable.js';
 
 const esc = (s) => window.APKSoftapp.esc(s);
 
@@ -24,6 +23,29 @@ export class IpamApp {
     this.things = [];
     this.tableHost = document.getElementById('subnet-table');
     this.svgContainer = document.getElementById('utilization-svg');
+    window.APKSoftapp.describe({
+      name: 'IPAM Manager',
+      does: 'Plans subnets and VLANs for one IPAM scope and holds them against the addresses the bus has actually seen.',
+      inputs: [
+        { name: 'IPAM scope block', from: 'the CAD block this editor was opened on (host@1 load)', kind: 'cad' },
+        { name: 'Block file', from: '.json picked with Open Block', kind: 'file' },
+        { name: 'Discovered addresses', from: 'APKSoftapp.discovered(): scanners, agents and presence on the bus', kind: 'bus' },
+        { name: 'Which things to show', from: 'config/discovery.json (kinds, countStates, suggestPrefix)', kind: 'file' },
+      ],
+      outputs: [
+        { name: 'IPAM scope block', to: 'the CAD drawing on Save & Return, or a .json download standalone', kind: 'cad' },
+        { name: 'Live edits', to: 'the CAD after every change (blockChanged)', kind: 'cad' },
+      ],
+      controls: [
+        { name: '+ Add Subnet', how: 'adds the next 192.168.x.0/24 with its VLAN and gateway' },
+        { name: 'Subnet table', how: 'edit CIDR, VLAN, purpose, gateway, used, total; the row × deletes it' },
+        { name: 'Plan subnet', how: 'on a discovered address no subnet holds: adds the subnet that would hold it' },
+        { name: '⚡ Discovered', how: 'show / hide the On the network table' },
+        { name: 'IPAM Scope Name', how: 'the scope name saved in the block' },
+        { name: 'Save & Return / ✕', how: 'save into the CAD (or download) / close the editor' },
+      ],
+      problems: ['bad_json', 'bad_input', 'file_unreadable', 'bus_missing', 'http_not_found', 'not_in_cad'],
+    });
     this.initControls();
     this.render();
     this.startDiscovered();
@@ -40,17 +62,24 @@ export class IpamApp {
     const status = document.getElementById('net-status');
     if (!host) return;
     try {
-      this.rules = await loadRules(import.meta.url);
+      const cfg = await window.APKSoftapp.discoveredConfig(new URL('../config/discovery.json', import.meta.url), { required: true });
+      if (cfg.problem) throw Object.assign(new Error(cfg.why), { problem: cfg.problem });
+      this.rules = cfg;
     } catch (err) {
       if (status) { status.setAttribute('data-apk-state', 'dead'); status.textContent = `Could not read config/discovery.json (${err.message}).`; }
+      window.APKSoftapp.showProblem(err.problem || err, {
+        subject: 'config/discovery.json',
+        fix: ['config/discovery.json sits beside index.html in EDITORS.IPAM; it says which bus things are shown.'],
+        onRetry: () => this.startDiscovered(),
+      });
       return;
     }
-    this.network = await mountDiscovered({
-      host, status, id: 'ipam-discovered', kinds: this.rules.kinds,
+    this.network = await window.APKSoftapp.discoveredPanel(host, {
+      status, id: 'ipam-discovered', config: this.rules,
       empty: 'No addresses on the bus yet.',
-      columns: [...THING_COLUMNS.slice(0, 4), { key: 'subnet', label: 'In subnet', editable: false, mono: true }, THING_COLUMNS[5]],
-      toRows: (things) => things.filter((t) => t.ips && t.ips.length).map((t) => ({ ...thingRow(t), subnet: this.subnetOf(t) })),
-      action: { label: 'Plan subnet', run: (t) => this.planSubnet(t) },
+      columns: [...window.APKSoftapp.DISCOVERED_COLUMNS.slice(0, 4), { key: 'subnet', label: 'In subnet', editable: false, mono: true }, window.APKSoftapp.DISCOVERED_COLUMNS[5]],
+      toRows: (things) => things.filter((t) => t.ips && t.ips.length).map((t) => ({ ...window.APKSoftapp.thingRow(t), subnet: this.subnetOf(t) })),
+      pickLabel: 'Plan subnet', onPick: (t) => this.planSubnet(t),
       onChange: (things) => { this.things = things; this.renderTable(); this.renderSvg(); },
     });
   }
@@ -103,9 +132,13 @@ export class IpamApp {
               this.render();
               this.changed();
             } catch (err) {
-              alert('Invalid block file: ' + err.message);
+              window.APKSoftapp.showProblem(err.name === 'SyntaxError' ? 'bad_json' : 'bad_input', {
+                subject: file.name, detail: err.message,
+                fix: ['Open an IPAM scope block (.json saved by this editor, blockType ipam_scope).'],
+              });
             }
           };
+          reader.onerror = () => window.APKSoftapp.showProblem('file_unreadable', { subject: file.name, detail: reader.error && reader.error.message });
           reader.readAsText(file);
         };
         input.click();
