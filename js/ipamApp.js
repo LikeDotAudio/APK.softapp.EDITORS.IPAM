@@ -3,6 +3,7 @@
 
 import { IpamModel } from './ipamModel.js';
 import { sightings, subnetFor, inCidr } from './ipamDiscovered.js';
+import { loadSystems, saveSubnets, systemsToSubnets, exportSiteIfc } from './ipamBench.js';
 
 const esc = (s) => window.APKSoftapp.esc(s);
 
@@ -31,10 +32,13 @@ export class IpamApp {
         { name: 'Block file', from: '.json picked with Open Block', kind: 'file' },
         { name: 'Discovered addresses', from: 'APKSoftapp.discovered(): scanners, agents and presence on the bus', kind: 'bus' },
         { name: 'Which things to show', from: 'config/discovery.json (kinds, countStates, suggestPrefix)', kind: 'file' },
+        { name: 'The bench plan', from: 'DATABASE.server.BIM GET /api/bim/bench/systems on ⇩ From bench (each row with its IfcGlobalId)' },
       ],
       outputs: [
         { name: 'IPAM scope block', to: 'the CAD drawing on Save & Return, or a .json download standalone', kind: 'cad' },
         { name: 'Live edits', to: 'the CAD after every change (blockChanged)', kind: 'cad' },
+        { name: 'The bench plan', to: 'DATABASE.server.BIM bench systems on ⇧ To bench: VLANs and subnets in the site IFC model' },
+        { name: 'Site model', to: 'a site.ifc download on ⬇ Export IFC (GET /api/bim/site.ifc)', kind: 'file' },
       ],
       controls: [
         { name: '+ Add Subnet', how: 'adds the next 192.168.x.0/24 with its VLAN and gateway' },
@@ -43,8 +47,10 @@ export class IpamApp {
         { name: '⚡ Discovered', how: 'show / hide the On the network table' },
         { name: 'IPAM Scope Name', how: 'the scope name saved in the block' },
         { name: 'Save & Return / ✕', how: 'save into the CAD (or download) / close the editor' },
+        { name: '⇩ From bench / ⇧ To bench', how: 'read the planned VLANs and subnets from the BIM bench / plan these there' },
+        { name: '⬇ Export IFC', how: 'download the site model (site.ifc): the plan, the devices and their cables' },
       ],
-      problems: ['bad_json', 'bad_input', 'file_unreadable', 'bus_missing', 'http_not_found', 'not_in_cad'],
+      problems: ['bad_json', 'bad_input', 'file_unreadable', 'bus_missing', 'http_not_found', 'not_in_cad', 'http_forbidden', 'http_server_error'],
     });
     this.initControls();
     this.render();
@@ -100,6 +106,48 @@ export class IpamApp {
     this.changed();
   }
 
+  /** ⇩ From bench: the bench's planned subnets replace the table (counts kept by CIDR). */
+  async fromBench() {
+    try {
+      const items = await loadSystems();
+      this.model.subnets = systemsToSubnets(items, this.model.subnets);
+      this.render();
+      this.changed();
+      return this.model.subnets;
+    } catch (err) {
+      window.APKSoftapp.showProblem(err, { subject: 'the bench plan', fix: ['The plan is the BIM bench (DATABASE.server.BIM, /api/bim): check it is running in DockTor.'], onRetry: () => this.fromBench() });
+      return null;
+    }
+  }
+
+  /** ⇧ To bench: these subnets and their VLANs become the bench's plan (and so its IFC model). */
+  async toBench() {
+    try {
+      const items = await saveSubnets(this.model.subnets);
+      this.model.subnets = systemsToSubnets(items, this.model.subnets);
+      this.render();
+      return items;
+    } catch (err) {
+      window.APKSoftapp.showProblem(err, { subject: 'plan on the bench', fix: ['Each row needs a VLAN 1..4094, a CIDR network and a gateway inside it.'], onRetry: () => this.toBench() });
+      return null;
+    }
+  }
+
+  /** ⬇ Export IFC: the site model as an .ifc download (no IFC parser in the page). */
+  async exportIfc() {
+    try {
+      const text = await exportSiteIfc();
+      const url = URL.createObjectURL(new Blob([text], { type: 'model/step' }));
+      const a = Object.assign(document.createElement('a'), { href: url, download: 'site.ifc' });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return text;
+    } catch (err) {
+      window.APKSoftapp.showProblem(err, { subject: 'site.ifc', onRetry: () => this.exportIfc() });
+      return null;
+    }
+  }
+
   handleBlockLoaded(block, meta) {
     if (block) {
       this.model.fromBlock(block);
@@ -144,6 +192,10 @@ export class IpamApp {
         input.click();
       });
     }
+
+    document.getElementById('btn-from-bench')?.addEventListener('click', () => this.fromBench());
+    document.getElementById('btn-to-bench')?.addEventListener('click', () => this.toBench());
+    document.getElementById('btn-export-ifc')?.addEventListener('click', () => this.exportIfc());
 
     const btnClose = document.getElementById('btn-close');
     if (btnClose) {
