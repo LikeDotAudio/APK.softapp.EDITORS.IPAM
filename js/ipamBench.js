@@ -14,7 +14,13 @@
    A VLAN the Switch or MoIP editor also uses keeps its members, DSCP and
    profile: To bench only names a VLAN, never empties it. allocated / total
    are counts, derived here, never stored. Every row read back keeps its
-   IfcGlobalId (guid), so a pick in an IFC viewer maps back. */
+   IfcGlobalId (guid), so a pick in an IFC viewer maps back.
+
+   THE CAD BLOCK KEEPS ONLY IDS (ROAD-3582). An ipam_scope block is
+   {type, id, scopeName, systems: [ids]} — the bench systems it plans, never
+   a private subnets[] copy (contracts BimSystemsRefSchema). An old block that
+   still carries subnets[] stays readable (readBlock): its rows load as they
+   were, and Save & Return moves them onto the bench, leaving only the ids. */
 
 export function bimApi() {
   try {
@@ -32,7 +38,41 @@ export function hostsIn(cidr) {
   return bits >= 31 ? n : n - 2;
 }
 
-const subnetId = (cidr) => `S-${String(cidr).replace(/[^0-9A-Za-z]+/g, '-').replace(/-+$/, '')}`;
+export const subnetId = (cidr) => `S-${String(cidr).replace(/[^0-9A-Za-z]+/g, '-').replace(/-+$/, '')}`;
+
+/** The bench ids a set of subnet rows plans: each subnet and its VLAN (VLANs first), once each. */
+export function systemIdsOf(subnets = []) {
+  const vlans = [];
+  const nets = [];
+  for (const sub of subnets) {
+    const v = sub.vlanSystem || (Number(sub.vlan) >= 1 ? `V${Number(sub.vlan)}` : null);
+    if (v && !vlans.includes(v)) vlans.push(v);
+    const n = sub.id || subnetId(sub.cidr);
+    if (!nets.includes(n)) nets.push(n);
+  }
+  return [...vlans, ...nets];
+}
+
+/** An ipam_scope block, either shape: {scopeName, systems} (ids, today) or {scopeName, subnets} (an old block). */
+export function readBlock(block = {}) {
+  const out = { scopeName: typeof block.scopeName === 'string' && block.scopeName ? block.scopeName : null, systems: null, subnets: null };
+  if (Array.isArray(block.systems)) out.systems = block.systems.filter(id => typeof id === 'string' && id);
+  else if (Array.isArray(block.subnets)) out.subnets = JSON.parse(JSON.stringify(block.subnets));
+  return out;
+}
+
+/** The bench rows a block's ids name: its subnets and the VLANs they sit in; `missing` = ids the bench lacks. */
+export function scopeOf(items = [], ids = []) {
+  const want = new Set(ids);
+  const byId = new Map(items.map(s => [s.id, s]));
+  const nets = items.filter(s => s.kind === 'subnet' && want.has(s.id));
+  const vlans = new Set(nets.map(s => s.parent));
+  for (const id of ids) if (byId.get(id)?.kind === 'vlan') vlans.add(id);
+  return {
+    items: items.filter(s => (s.kind === 'vlan' && vlans.has(s.id)) || nets.includes(s)),
+    missing: ids.filter(id => !byId.has(id)),
+  };
+}
 
 /** The bench's systems → the editor's subnet rows (a subnet whose VLAN is gone keeps vlan 0). */
 export function systemsToSubnets(items, previous = []) {
@@ -43,14 +83,17 @@ export function systemsToSubnets(items, previous = []) {
     const row = {
       cidr: s.cidr, vlan: v ? v.vlan_id : 0, name: s.name || v?.name || '', gateway: s.gateway || '',
       allocated: was.get(s.cidr)?.allocated ?? 0, total: hostsIn(s.cidr),
-      guid: s.guid, vlanGuid: v?.guid, id: s.id,
+      guid: s.guid, vlanGuid: v?.guid, id: s.id, vlanSystem: v?.id,
     };
     return row;
   });
 }
 
-/** The editor's subnet rows → the PUTs that plan them on the bench, merged onto what the bench holds. */
-export function subnetsToSystems(subnets, existing = []) {
+/** The editor's subnet rows → the PUTs that plan them on the bench, merged onto what the bench holds.
+    `owned` (the ids this block planned when it was loaded) limits the DELETEs to this block's own
+    subnets: a subnet another scope plans is never removed here. Without it, every bench subnet the
+    rows do not hold is removed (the whole-plan view of ⇩ From bench). */
+export function subnetsToSystems(subnets, existing = [], owned = null) {
   const byVid = new Map(existing.filter(s => s.kind === 'vlan').map(s => [s.vlan_id, s]));
   const byCidr = new Map(existing.filter(s => s.kind === 'subnet').map(s => [s.cidr, s]));
   const vlans = new Map();
@@ -72,7 +115,8 @@ export function subnetsToSystems(subnets, existing = []) {
     nets.push(JSON.parse(JSON.stringify(row)));
   }
   const keep = new Set(nets.map(n => n.id));
-  const gone = existing.filter(s => s.kind === 'subnet' && !keep.has(s.id)).map(s => s.id);
+  const mine = owned ? new Set(owned) : null;
+  const gone = existing.filter(s => s.kind === 'subnet' && !keep.has(s.id) && (!mine || mine.has(s.id))).map(s => s.id);
   return { puts: [...vlans.values(), ...nets], deletes: gone };
 }
 
@@ -93,9 +137,9 @@ export async function loadSystems({ api = bimApi(), fetchImpl = globalThis.fetch
 }
 
 /** Write the subnets as the bench's plan: VLANs first (a subnet names one), then subnets, then the removed ones. */
-export async function saveSubnets(subnets, { api = bimApi(), fetchImpl = globalThis.fetch } = {}) {
+export async function saveSubnets(subnets, { api = bimApi(), fetchImpl = globalThis.fetch, owned = null } = {}) {
   const existing = await loadSystems({ api, fetchImpl });
-  const { puts, deletes } = subnetsToSystems(subnets, existing);
+  const { puts, deletes } = subnetsToSystems(subnets, existing, owned);
   for (const row of puts) {
     const { id, ...body } = row;
     await answer(await fetchImpl(`${api}/bench/systems/${encodeURIComponent(id)}`, {

@@ -2,7 +2,8 @@
 // MIT Licence. Free, for everyone, for ever. Full text in LICENSE at the root.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { subnetsToSystems, systemsToSubnets, saveSubnets, loadSystems, exportSiteIfc, hostsIn } from '../js/ipamBench.js';
+import { subnetsToSystems, systemsToSubnets, saveSubnets, loadSystems, exportSiteIfc, hostsIn, readBlock, scopeOf, systemIdsOf } from '../js/ipamBench.js';
+import { IpamModel } from '../js/ipamModel.js';
 
 // The plan on the bench (network-discovery-3/7): the IPAM rows round-trip through
 // /api/bim/bench/systems, a VLAN another editor filled keeps its members, every row has its GlobalId.
@@ -73,4 +74,32 @@ test('Export IFC is GET /api/bim/site.ifc', async () => {
   const b = bench();
   assert.equal(await exportSiteIfc({ api: '/api/bim', fetchImpl: b.impl }), 'ISO-10303-21;');
   assert.equal(b.calls[0].url, '/api/bim/site.ifc');
+});
+
+test('an old block migrates: its rows go onto the bench, the block keeps their ids, and the ids read the same rows back', async () => {
+  const b = bench([{ id: 'S-other', kind: 'subnet', parent: 'V10', cidr: '10.99.0.0/24' }, { id: 'V10', kind: 'vlan', vlan_id: 10 }]);
+  const old = new IpamModel();
+  old.fromBlock({ type: 'ipam_scope', scopeName: 'OLD', subnets: SUBNETS });
+  assert.equal(old.legacy, true);
+  await saveSubnets(old.subnets, { api: '/api/bim', fetchImpl: b.impl, owned: [] });
+  assert.ok(b.rows.has('S-other'), 'a subnet another scope plans is never removed by this block');
+  const block = old.toBlock();
+  assert.deepEqual(block.systems, ['V10', 'V100', 'S-10-10-10-0-24', 'S-10-10-100-0-23']);
+
+  const fresh = new IpamModel();
+  fresh.fromBlock(block);
+  const { items, missing } = scopeOf(await loadSystems({ api: '/api/bim', fetchImpl: b.impl }), fresh.systems);
+  assert.deepEqual(missing, []);
+  fresh.subnets = systemsToSubnets(items, []);
+  assert.deepEqual(fresh.subnets.map(r => [r.cidr, r.vlan, r.name, r.gateway]), SUBNETS.map(r => [r.cidr, r.vlan, r.name, r.gateway]));
+  assert.deepEqual(systemIdsOf(fresh.subnets), block.systems, 'ids in, the same ids out');
+});
+
+test('owned limits the deletes to the block\'s own subnets; readBlock reads both shapes', () => {
+  const existing = [{ id: 'V10', kind: 'vlan', vlan_id: 10 }, { id: 'S-a', kind: 'subnet', parent: 'V10', cidr: '10.1.0.0/24' }, { id: 'S-b', kind: 'subnet', parent: 'V10', cidr: '10.2.0.0/24' }];
+  assert.deepEqual(subnetsToSystems([], existing, ['S-a']).deletes, ['S-a']);
+  assert.deepEqual(subnetsToSystems([], existing).deletes, ['S-a', 'S-b']);
+  assert.deepEqual(readBlock({ scopeName: 'X', systems: ['V10', '', 3] }), { scopeName: 'X', systems: ['V10'], subnets: null });
+  assert.deepEqual(readBlock({ subnets: [{ cidr: '10.0.0.0/8' }] }).subnets, [{ cidr: '10.0.0.0/8' }]);
+  assert.deepEqual(scopeOf(existing, ['S-b', 'S-gone']), { items: [existing[0], existing[2]], missing: ['S-gone'] });
 });

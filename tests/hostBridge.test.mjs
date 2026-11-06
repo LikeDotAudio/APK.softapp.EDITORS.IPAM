@@ -25,9 +25,9 @@ function editor(S) {
 test('block round trip: load from the CAD, edit, request answers blockSave with the edit, at our origin', async () => {
   const { S, toParent, fire } = world();
   const { model } = editor(S);
-  const sent = new IpamModel('STUDIO-B');
-  sent.subnets = [{ cidr: '10.1.0.0/24', vlan: 11, name: 'Dante A', gateway: '10.1.0.1', allocated: 3, total: 254 }];
-  fire({ protocol: 'cad.like.audio/host@1', type: 'load', block: sent.toBlock(), meta: { blockName: 'IPAM_B' } });
+  // an old block (its own subnets[]) loads as it was …
+  const sent = { type: 'ipam_scope', scopeName: 'STUDIO-B', subnets: [{ cidr: '10.1.0.0/24', vlan: 11, name: 'Dante A', gateway: '10.1.0.1', allocated: 3, total: 254 }] };
+  fire({ protocol: 'cad.like.audio/host@1', type: 'load', block: sent, meta: { blockName: 'IPAM_B' } });
   assert.equal(model.scopeName, 'STUDIO-B');
   assert.equal(model.subnets.length, 1);
   model.updateSubnet(0, 'vlan', '12');
@@ -36,7 +36,9 @@ test('block round trip: load from the CAD, edit, request answers blockSave with 
   assert.equal(save.o, ORIGIN);
   assert.equal(save.m.type, 'blockSave');
   assert.equal(save.m.blockType, 'ipam_scope');
-  assert.equal(save.m.block.subnets[0].vlan, 12);
+  // … and goes back as the bench ids it plans, no copy (ROAD-3582)
+  assert.deepEqual(save.m.block.systems, ['V12', 'S-10-1-0-0-24']);
+  assert.equal(save.m.block.subnets, undefined);
   assert.equal(save.m.meta.blockName, 'IPAM_B');
   const contract = await hostContract();
   if (contract) for (const { m } of toParent) assert.deepEqual(contract.validateMessage(contract.schema, 'toCad', m), [], m.type);

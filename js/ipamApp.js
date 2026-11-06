@@ -3,7 +3,7 @@
 
 import { IpamModel } from './ipamModel.js';
 import { sightings, subnetFor, inCidr } from './ipamDiscovered.js';
-import { loadSystems, saveSubnets, systemsToSubnets, exportSiteIfc } from './ipamBench.js';
+import { loadSystems, saveSubnets, systemsToSubnets, exportSiteIfc, scopeOf } from './ipamBench.js';
 
 const esc = (s) => window.APKSoftapp.esc(s);
 
@@ -35,7 +35,7 @@ export class IpamApp {
         { name: 'The bench plan', from: 'DATABASE.server.BIM GET /api/bim/bench/systems on ⇩ From bench (each row with its IfcGlobalId)' },
       ],
       outputs: [
-        { name: 'IPAM scope block', to: 'the CAD drawing on Save & Return, or a .json download standalone', kind: 'cad' },
+        { name: 'IPAM scope block', to: 'the CAD drawing on Save & Return (after the rows are planned on the bench), or a .json download standalone: {scopeName, systems: [bench ids]}, no copy of the plan', kind: 'cad' },
         { name: 'Live edits', to: 'the CAD after every change (blockChanged)', kind: 'cad' },
         { name: 'The bench plan', to: 'DATABASE.server.BIM bench systems on ⇧ To bench: VLANs and subnets in the site IFC model' },
         { name: 'Site model', to: 'a site.ifc download on ⬇ Export IFC (GET /api/bim/site.ifc)', kind: 'file' },
@@ -46,7 +46,7 @@ export class IpamApp {
         { name: 'Plan subnet', how: 'on a discovered address no subnet holds: adds the subnet that would hold it' },
         { name: '⚡ Discovered', how: 'show / hide the On the network table' },
         { name: 'IPAM Scope Name', how: 'the scope name saved in the block' },
-        { name: 'Save & Return / ✕', how: 'save into the CAD (or download) / close the editor' },
+        { name: 'Save & Return / ✕', how: 'plan the rows on the bench, then save the block (their bench ids) into the CAD (or download) / close the editor' },
         { name: '⇩ From bench / ⇧ To bench', how: 'read the planned VLANs and subnets from the BIM bench / plan these there' },
         { name: '⬇ Export IFC', how: 'download the site model (site.ifc): the plan, the devices and their cables' },
       ],
@@ -111,6 +111,8 @@ export class IpamApp {
     try {
       const items = await loadSystems();
       this.model.subnets = systemsToSubnets(items, this.model.subnets);
+      this.owned = this.model.subnets.map((r) => r.id);
+      this.model.legacy = false;
       this.render();
       this.changed();
       return this.model.subnets;
@@ -120,11 +122,37 @@ export class IpamApp {
     }
   }
 
-  /** ⇧ To bench: these subnets and their VLANs become the bench's plan (and so its IFC model). */
+  /** The rows a block names, read from the bench (a block keeps only ids, ROAD-3582). */
+  async loadScope() {
+    const ids = this.model.systems || [];
+    try {
+      const { items, missing } = scopeOf(await loadSystems(), ids);
+      this.model.subnets = systemsToSubnets(items, this.model.subnets);
+      this.owned = this.model.subnets.map((r) => r.id);
+      this.render();
+      if (missing.length) {
+        window.APKSoftapp.showProblem('http_not_found', {
+          subject: 'the bench plan', detail: `This block names ${missing.join(', ')}, which the bench does not hold.`,
+          fix: ['Someone removed them from the bench plan; add the subnets again and Save & Return, or ⇩ From bench for the whole plan.'],
+        });
+      }
+      return this.model.subnets;
+    } catch (err) {
+      window.APKSoftapp.showProblem(err, { subject: 'the bench plan', detail: `This block names ${ids.join(', ') || 'no systems'} on the BIM bench.`, fix: ['The plan is the BIM bench (DATABASE.server.BIM, /api/bim): check it is running in DockTor.'], onRetry: () => this.loadScope() });
+      return null;
+    }
+  }
+
+  /** ⇧ To bench: these subnets and their VLANs become the bench's plan (and so its IFC model).
+      Only subnets this block planned when it was loaded are ever removed (`owned`). */
   async toBench() {
     try {
-      const items = await saveSubnets(this.model.subnets);
-      this.model.subnets = systemsToSubnets(items, this.model.subnets);
+      const items = await saveSubnets(this.model.subnets, { owned: this.owned || [] });
+      const cidrs = new Set(this.model.subnets.map((r) => r.cidr));
+      const planned = items.filter((r) => r.kind === 'subnet' && cidrs.has(r.cidr)).map((r) => r.id);
+      this.model.subnets = systemsToSubnets(scopeOf(items, planned).items, this.model.subnets);
+      this.owned = this.model.subnets.map((r) => r.id);
+      this.model.legacy = false;
       this.render();
       return items;
     } catch (err) {
@@ -148,19 +176,28 @@ export class IpamApp {
     }
   }
 
+  /** A block names bench ids (read them from the bench); an old one carries its rows (kept as they are
+      until Save & Return moves them onto the bench). */
   handleBlockLoaded(block, meta) {
-    if (block) {
-      this.model.fromBlock(block);
-      this.render();
-    }
+    if (!block) return;
+    this.model.fromBlock(block);
+    this.owned = [];
+    this.render();
+    if (this.model.systems) this.loadScope();
+  }
+
+  /** Save & Return: the rows go onto the bench first, then the block — their ids — into the CAD. */
+  async saveBlock() {
+    if (!(await this.toBench())) return null;
+    const block = this.model.toBlock();
+    this.host.save(block, { name: this.model.scopeName, filename: block.id });
+    return block;
   }
 
   initControls() {
     const btnSave = document.getElementById('btn-save');
     if (btnSave) {
-      btnSave.addEventListener('click', () => {
-        this.host.save(this.model.toBlock(), { name: this.model.scopeName, filename: this.model.toBlock().id });
-      });
+      btnSave.addEventListener('click', () => this.saveBlock());
     }
 
     const btnOpen = document.getElementById('btn-open');
@@ -176,13 +213,12 @@ export class IpamApp {
           reader.onload = (evt) => {
             try {
               const data = JSON.parse(evt.target.result);
-              this.model.fromBlock(data);
-              this.render();
+              this.handleBlockLoaded(data);
               this.changed();
             } catch (err) {
               window.APKSoftapp.showProblem(err.name === 'SyntaxError' ? 'bad_json' : 'bad_input', {
                 subject: file.name, detail: err.message,
-                fix: ['Open an IPAM scope block (.json saved by this editor, blockType ipam_scope).'],
+                fix: ['Open an IPAM scope block (.json saved by this editor, blockType ipam_scope: {scopeName, systems} or an old one with subnets).'],
               });
             }
           };

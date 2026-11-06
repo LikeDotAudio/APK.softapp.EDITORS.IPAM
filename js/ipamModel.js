@@ -1,9 +1,15 @@
 // Part of the APK.audio project — http://APK.audio — made by Anthony Kuzub
 // MIT Licence. Free, for everyone, for ever. Full text in LICENSE at the root.
+/* The subnet rows are the editor's working copy; the plan itself is the BIM
+   bench (ipamBench.js). The CAD block keeps only the ids of the bench systems
+   the rows plan (ROAD-3582); an old block's subnets[] still loads. */
+import { readBlock, systemIdsOf } from './ipamBench.js';
 
 export class IpamModel {
   constructor(scopeName = 'ENTERPRISE-AV-NETWORK') {
     this.scopeName = scopeName;
+    this.systems = null;   // the ids a loaded block named (null: none loaded)
+    this.legacy = false;   // rows from an old block that carried its own subnets[]
     this.subnets = [
       { cidr: '10.10.10.0/24', vlan: 10, name: 'Dante Primary Audio', gateway: '10.10.10.1', allocated: 48, total: 254 },
       { cidr: '10.10.20.0/24', vlan: 20, name: 'Dante Secondary Audio', gateway: '10.10.20.1', allocated: 48, total: 254 },
@@ -42,19 +48,29 @@ export class IpamModel {
     }
   }
 
+  /** {type, id, scopeName, systems: [ids]} — the bench systems these rows plan, no copy of them. */
   toBlock() {
     return {
       type: 'ipam_scope',
       id: `ipam_${this.scopeName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
       scopeName: this.scopeName,
-      subnets: JSON.parse(JSON.stringify(this.subnets))
+      systems: systemIdsOf(this.subnets),
     };
   }
 
+  /** Load a block. Ids: `systems` is set and the rows wait for the bench (IpamApp.loadScope).
+      An old block's subnets[]: the rows load as they were and `legacy` says they are not on the bench yet. */
   fromBlock(block = {}) {
-    if (block.scopeName) this.scopeName = block.scopeName;
-    if (Array.isArray(block.subnets)) {
-      this.subnets = JSON.parse(JSON.stringify(block.subnets));
+    const b = readBlock(block);
+    if (b.scopeName) this.scopeName = b.scopeName;
+    if (b.systems) {
+      this.systems = b.systems;
+      this.legacy = false;
+      this.subnets = [];
+    } else if (b.subnets) {
+      this.systems = null;
+      this.legacy = true;
+      this.subnets = b.subnets;
     }
   }
 }
