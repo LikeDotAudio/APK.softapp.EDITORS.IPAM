@@ -1,6 +1,6 @@
 {
   "name": "ipam-address-manager",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "IPAM Address Manager on APK.audio",
   "type": "module",
   "scripts": {
